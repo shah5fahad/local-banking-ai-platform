@@ -1,0 +1,93 @@
+# Local development and integration stack.
+name: local-banking-ai
+
+x-common: &common
+  env_file:
+    - .env
+  restart: unless-stopped
+
+services:
+  banking:
+    <<: *common
+    build:
+      context: .
+      dockerfile: banking_service/Dockerfile
+    command: sh -c "alembic upgrade head && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 8001"
+    ports:
+      - "8001:8001"
+    volumes:
+      - banking_data:/data
+    environment:
+      - BANKING_DATABASE_URL=sqlite:////data/banking.db
+      - CORS_ORIGINS=http://localhost:8501,http://frontend:8501
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - backend
+
+  ai:
+    <<: *common
+    build:
+      context: .
+      dockerfile: ai_service/Dockerfile
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8002"
+    ports:
+      - "8002:8002"
+    depends_on:
+      banking:
+        condition: service_healthy
+    volumes:
+      - ai_data:/data          # separate volume: no shared DB with banking
+    environment:
+      - AI_DATABASE_URL=sqlite:////data/ai.db
+      - AI_BANKING_SERVICE_URL=http://banking:8001/api/v1
+      - BANKING_SERVICE_URL=http://banking:8001/api/v1
+      - CORS_ORIGINS=http://localhost:8501,http://frontend:8501
+      - LANGGRAPH_CHECKPOINT_DB=/data/checkpoints.db
+      - AI_UPLOAD_DIR=/data/uploads
+      - AI_VECTOR_STORE_PATH=/data/vectorstore
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - backend
+
+  frontend:
+    <<: *common
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    command: streamlit run app.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    depends_on:
+      banking:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    environment:
+      - BANKING_API_URL=http://banking:8001/api/v1
+      - AI_API_URL=http://ai:8002/api/v1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - backend
+
+volumes:
+  banking_data:
+  ai_data:
+
+networks:
+  backend:
+    driver: bridge
