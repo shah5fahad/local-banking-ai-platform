@@ -43,5 +43,3 @@ docker compose up --build
 
 ## Status
 Phase 0: architecture and planning complete. Implementation starts only after this design is reviewed (see open questions in `docs/requirements.md`).
-
-NVIDIA_API_KEY=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
