@@ -46,6 +46,21 @@ def add_account(
     return AccountResponse.model_validate(account)
 
 
+@router.get("/balance", response_model=BalanceResponse, summary="Get top active account balance")
+def get_top_account_balance(
+    user: CurrentUser,
+    db: DbSession,
+) -> BalanceResponse:
+    """Fetch real-time available balance for the top active account when account ID is omitted."""
+    bal = AccountService.get_balance(user.id, None, db=db)
+    return BalanceResponse(
+        bank_name=bal.get("bank_name") or "Primary Bank",
+        available_minor=bal["available_minor"],
+        currency=bal["currency"],
+        as_of=bal["as_of"],
+    )
+
+
 @router.get("/{id}", response_model=AccountResponse, summary="Get account details")
 def get_account(
     id: str,
@@ -99,9 +114,10 @@ def get_account_balance(
     user: CurrentUser,
     db: DbSession,
 ) -> BalanceResponse:
-    """Fetch real-time available balance for account."""
+    """Fetch real-time available balance for account (or top active if id is missing/default/top/active)."""
     bal = AccountService.get_balance(user.id, id, db=db)
     return BalanceResponse(
+        bank_name=bal.get("bank_name") or "Primary Bank",
         available_minor=bal["available_minor"],
         currency=bal["currency"],
         as_of=bal["as_of"],

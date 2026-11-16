@@ -98,6 +98,19 @@ def test_end_to_end_signup_auto_creates_verified_bank_account(client: TestClient
     bal_data = bal_res.json()
     assert bal_data["available_minor"] == 10_000_000
     assert bal_data["currency"] == "INR"
+    assert bal_data["bank_name"] is not None
+    assert "account_id" not in bal_data
+    assert "formatted_date" not in bal_data
+
+    # 6. Check balance without account details via GET /api/v1/accounts/balance (top active account)
+    top_bal_res = client.get("/api/v1/accounts/balance", headers=headers)
+    assert top_bal_res.status_code == 200
+    top_bal_data = top_bal_res.json()
+    assert top_bal_data["available_minor"] == 10_000_000
+    assert top_bal_data["currency"] == "INR"
+    assert top_bal_data["bank_name"] is not None
+    assert "account_id" not in top_bal_data
+    assert "formatted_date" not in top_bal_data
 
 
 def test_multiple_signups_create_distinct_accounts(client: TestClient) -> None:

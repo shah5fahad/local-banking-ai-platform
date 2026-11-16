@@ -150,8 +150,23 @@ class BankingClient:
     def get_account(self, account_id: str) -> dict:
         return self._get(f"/api/v1/accounts/{account_id}")
 
-    def get_balance(self, account_id: str) -> dict:
-        return self._get(f"/api/v1/accounts/{account_id}/balance")
+    def get_balance(self, account_id: str | None = None) -> dict:
+        """Fetch balance for the given account ID, or top active account if omitted."""
+        if account_id:
+            return self._get(f"/api/v1/accounts/{account_id}/balance")
+        # When account_id is omitted, fetch top active account balance directly
+        try:
+            return self._get("/api/v1/accounts/balance")
+        except BankingClientError as exc:
+            # Fallback if endpoint is not reachable directly
+            if exc.http_status in (404, 405):
+                accounts = self.list_accounts()
+                active = [a for a in accounts if a.get("status") == "ACTIVE"]
+                target = active[0] if active else (accounts[0] if accounts else None)
+                if not target:
+                    raise
+                return self._get(f"/api/v1/accounts/{target['id']}/balance")
+            raise
 
     # ----------------------------------------------------------------
     # Beneficiaries

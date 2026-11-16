@@ -60,6 +60,16 @@ class TestBankingClientAccounts:
             result = client.get_balance("acc-1")
             assert result["balance_minor"] == 50000
 
+    def test_get_balance_without_account_id_success(self, client: BankingClient) -> None:
+        mock_response = {"account_id": "acc-top", "balance_minor": 75000, "currency": "INR"}
+        with patch("httpx.get") as mock_get:
+            mock_get.return_value = MagicMock(
+                status_code=200, is_success=True, json=lambda: mock_response
+            )
+            result = client.get_balance()
+            assert result["balance_minor"] == 75000
+            assert "/api/v1/accounts/balance" in mock_get.call_args.args[0]
+
     def test_timeout_raises_banking_client_error(self, client: BankingClient) -> None:
         with patch("httpx.get", side_effect=httpx.TimeoutException("timeout")):
             with pytest.raises(BankingClientError) as exc:

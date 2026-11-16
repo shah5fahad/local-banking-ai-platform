@@ -76,9 +76,17 @@ class UpdateAccountRequest(BaseModel):
 class BalanceResponse(BaseModel):
     """Account balance response."""
 
+    bank_name: str = "Primary Bank"
     available_minor: int
     currency: str
-    as_of: datetime
+    as_of: str
+
+    @field_validator("as_of", mode="before")
+    @classmethod
+    def format_as_of(cls, v: datetime | str) -> str:
+        if isinstance(v, datetime):
+            return v.strftime("%d %b %Y, %I:%M %p UTC")
+        return str(v)
 
 
 class VerifyAccountResponse(BaseModel):

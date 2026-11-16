@@ -222,15 +222,27 @@ class AccountService:
 
     @staticmethod
     def get_balance(
-        user_id: str, account_id: str, db: Session
+        user_id: str, account_id: str | None = None, db: Session = None
     ) -> dict[str, Any]:
-        """Fetch current available balance and currency."""
+        """Fetch current available balance and currency. If account_id is omitted or default/top/active, fetch top active account."""
         repo = AccountRepository(db)
-        account = repo.get_by_id(account_id, user_id)
-        if not account:
-            raise NotFoundError("Account", account_id)
+        if not account_id or str(account_id).strip() == "" or str(account_id).strip().lower() in ("default", "top", "active", "me", "primary", "none"):
+            active_accounts = repo.list_for_user(user_id, status="ACTIVE")
+            account = active_accounts[0] if active_accounts else None
+            if not account:
+                all_accounts = repo.list_for_user(user_id)
+                account = all_accounts[0] if all_accounts else None
+            if not account:
+                raise NotFoundError("Account", "No bank account found for user")
+        else:
+            account = repo.get_by_id(account_id, user_id)
+            if not account:
+                raise NotFoundError("Account", account_id)
 
         return {
+            "account_id": account.id,
+            "bank_name": account.bank_name or "Primary Bank",
+            "account_number_last4": account.account_number_last4,
             "available_minor": account.balance_minor,
             "currency": account.currency,
             "as_of": datetime.now(timezone.utc),

@@ -46,6 +46,7 @@ def approval_gate_node(state: GraphState, config: RunnableConfig) -> dict[str, A
         if not approval_id:
             # Ensure conversation exists to satisfy FK constraint if invoked standalone
             from app.models.chat import ChatUserReference, Conversation
+            import uuid
 
             if not conv_id:
                 conv_id = thread_id or str(uuid.uuid4())

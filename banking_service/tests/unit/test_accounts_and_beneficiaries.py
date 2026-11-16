@@ -97,6 +97,50 @@ class TestAccountService:
         with pytest.raises(NotFoundError):
             AccountService.get_account("other-user-999", account.id, db_session)
 
+    def test_get_balance_specific_and_missing_account_id(self, db_session, test_settings, test_user) -> None:
+        req1 = CreateAccountRequest(
+            holder_name="Test User",
+            account_number="123456789012",
+            ifsc="HDFC0001234",
+            bank_name="HDFC Bank",
+            account_type="SAVINGS",
+        )
+        acc1 = AccountService.add_account(test_user.id, req1, db_session, test_settings)
+        acc1.balance_minor = 50000
+        db_session.commit()
+
+        req2 = CreateAccountRequest(
+            holder_name="Test User",
+            account_number="987654321098",
+            ifsc="ICIC0005678",
+            bank_name="ICICI Bank",
+            account_type="CURRENT",
+        )
+        acc2 = AccountService.add_account(test_user.id, req2, db_session, test_settings)
+        acc2.balance_minor = 75000
+        db_session.commit()
+
+        # 1. Specific account balance
+        bal1 = AccountService.get_balance(test_user.id, acc1.id, db_session)
+        assert bal1["available_minor"] == 50000
+        assert bal1["account_id"] == acc1.id
+        assert bal1["bank_name"] == "HDFC Bank"
+
+        # 2. Missing account ID (None) -> automatically gets the top active account (acc2, latest created active)
+        bal_auto = AccountService.get_balance(test_user.id, None, db_session)
+        assert bal_auto["account_id"] == acc2.id
+        assert bal_auto["available_minor"] == 75000
+        assert bal_auto["bank_name"] == "ICICI Bank"
+
+        # 3. String alias 'default' -> automatically gets top active account
+        bal_default = AccountService.get_balance(test_user.id, "default", db_session)
+        assert bal_default["account_id"] == acc2.id
+        assert bal_default["bank_name"] == "ICICI Bank"
+
+    def test_get_balance_no_accounts_raises(self, db_session, test_user) -> None:
+        with pytest.raises(NotFoundError):
+            AccountService.get_balance(test_user.id, None, db_session)
+
 
 class TestBeneficiaryService:
     def test_challenge_and_add_beneficiary(self, db_session, test_settings, test_user) -> None:

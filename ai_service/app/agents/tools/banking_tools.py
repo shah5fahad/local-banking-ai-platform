@@ -29,7 +29,7 @@ def _list_accounts(args: dict, client, state) -> dict:
 
 
 def _get_balance(args: dict, client, state) -> dict:
-    account_id = args["account_id"]
+    account_id = args.get("account_id") if args else None
     return client.get_balance(account_id)
 
 
@@ -128,24 +128,21 @@ BANKING_READ_TOOLS: list[ToolSpec] = [
     ToolSpec(
         name="get_balance",
         description=(
-            "Get the current available balance of ONE bank account. "
-            "Use when the user asks 'what is my balance' or 'how much money do I have in <bank/account>'. "
-            "Requires an `account_id` taken from list_accounts; never guess or invent an ID. "
-            "If the user has multiple accounts and hasn't specified which, call list_accounts first and "
-            "either ask which one they mean or fetch each balance. "
-            "Not for credit card dues (use get_card_outstanding) and not for a full financial overview "
-            "(use get_user_summary)."
+            "Get the current available balance. "
+            "Use when the user asks 'what is my balance', 'check my balance', or 'how much money do I have'. "
+            "It is NOT required to provide account details: if `account_id` is omitted, it will automatically "
+            "retrieve the balance of the user's top active account. "
+            "Pass `account_id` only if the user specifically asked about a particular account."
         ),
         args_schema={
             "type": "object",
             "properties": {
                 "account_id": {
                     "type": "string",
-                    "description": "Internal account ID exactly as returned in the `id` field of list_accounts "
-                    "(not the account number or last4).",
+                    "description": "Optional account ID from list_accounts. If omitted, the top active account is used.",
                 }
             },
-            "required": ["account_id"],
+            "required": [],
         },
         risk="READ",
         allowed_nodes={"banking_ops"},

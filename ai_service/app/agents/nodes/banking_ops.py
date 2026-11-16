@@ -82,6 +82,9 @@ def banking_ops_node(state: GraphState, config: RunnableConfig = None) -> dict:
                 fallback_tool = "list_transactions"
             elif "card" in query:
                 fallback_tool = "list_cards"
+            elif any(w in query for w in ["balance", "money", "funds", "how much"]):
+                fallback_tool = "get_balance"
+                fallback_args = {}
             else:
                 fallback_tool = "list_accounts"
         elif intent == "LOAN_INFO":
