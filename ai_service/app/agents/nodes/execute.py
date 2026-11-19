@@ -77,6 +77,9 @@ def execute_node(state: GraphState, config: RunnableConfig) -> dict[str, Any]:
                 "messages": [AIMessage(content=success_msg)],
                 "pending_action": None,
                 "approval_status": ApprovalStatus.EXECUTED.value,
+                "approval_id": None,
+                "authorization_id": None,
+                "authentication_status": "NONE",
             }
         except BankingClientError as exc:
             logger.error("BankingClient error executing beneficiary creation: %s", exc.message)
@@ -130,6 +133,9 @@ def execute_node(state: GraphState, config: RunnableConfig) -> dict[str, Any]:
                 "messages": [AIMessage(content=success_msg)],
                 "pending_action": None,
                 "approval_status": ApprovalStatus.EXECUTED.value,
+                "approval_id": None,
+                "authorization_id": None,
+                "authentication_status": "NONE",
             }
         except BankingClientError as exc:
             logger.error("BankingClient error executing transfer: %s", exc.message)
@@ -201,6 +207,9 @@ def execute_node(state: GraphState, config: RunnableConfig) -> dict[str, Any]:
                 "messages": [AIMessage(content=success_msg)],
                 "pending_action": None,
                 "approval_status": ApprovalStatus.EXECUTED.value,
+                "approval_id": None,
+                "authorization_id": None,
+                "authentication_status": "NONE",
             }
         except BankingClientError as exc:
             logger.error("BankingClient error submitting loan application: %s", exc.message)
@@ -254,6 +263,9 @@ def execute_node(state: GraphState, config: RunnableConfig) -> dict[str, Any]:
                 "messages": [AIMessage(content=success_msg)],
                 "pending_action": None,
                 "approval_status": ApprovalStatus.EXECUTED.value,
+                "approval_id": None,
+                "authorization_id": None,
+                "authentication_status": "NONE",
             }
         except BankingClientError as exc:
             logger.error("BankingClient error executing card payment: %s", exc.message)

@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 class CreditCardResponse(BaseModel):
@@ -98,3 +98,21 @@ class CardPaymentResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def amount(self) -> float:
+        """Amount in rupees."""
+        return round(self.amount_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def amount_rupees(self) -> float:
+        """Amount in rupees."""
+        return round(self.amount_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def amount_formatted(self) -> str:
+        """Formatted amount string in INR (e.g. ₹5,000.00)."""
+        return f"₹{self.amount_minor / 100.0:,.2f}"

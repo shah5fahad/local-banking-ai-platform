@@ -39,6 +39,7 @@ class ApprovalService:
         conversation_id: str,
         workflow_type: str | None = None,
         raw_token: str | None = None,
+        exclude_banking_resource_id: str | None = None,
     ) -> list[PendingApproval]:
         """Cancel and supersede existing active approvals for this conversation.
 
@@ -58,6 +59,8 @@ class ApprovalService:
         )
         if workflow_type:
             stmt = stmt.where(PendingApproval.workflow_type == workflow_type)
+        if exclude_banking_resource_id:
+            stmt = stmt.where(PendingApproval.banking_resource_id != exclude_banking_resource_id)
 
         active_approvals = list(self.db.execute(stmt).scalars().all())
         if not active_approvals:
@@ -188,6 +191,7 @@ class ApprovalService:
                 conversation_id=conversation_id,
                 workflow_type=workflow_type,
                 raw_token=raw_token,
+                exclude_banking_resource_id=banking_resource_id,
             )
 
         summary = summary_masked or {}
@@ -323,6 +327,11 @@ class ApprovalService:
                     "workflow": approval.workflow_type,
                     "banking_resource_id": approval.banking_resource_id,
                 }
+
+            if approval.status == ApprovalStatus.EXECUTED.value:
+                raise ConflictError(
+                    "Cannot reject approval in state 'EXECUTED': Transaction has already been executed."
+                )
 
             if approval.status not in (
                 ApprovalStatus.PENDING.value,

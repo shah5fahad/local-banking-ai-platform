@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 class PrepareTransferRequest(BaseModel):
@@ -35,6 +35,60 @@ class PrepareTransferResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def amount(self) -> float:
+        """Amount converted to rupees."""
+        return round(self.amount_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def amount_rupees(self) -> float:
+        """Amount in rupees."""
+        return round(self.amount_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def amount_formatted(self) -> str:
+        """Formatted amount string in INR (e.g. ₹5,000.00)."""
+        return f"₹{self.amount_minor / 100.0:,.2f}"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def fee_rupees(self) -> float:
+        """Fee in rupees."""
+        return round(self.fee_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def total_debit(self) -> float:
+        """Total debit in rupees."""
+        return round(self.total_debit_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def total_debit_rupees(self) -> float:
+        """Total debit in rupees."""
+        return round(self.total_debit_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def total_debit_formatted(self) -> str:
+        """Formatted total debit string in INR (e.g. ₹5,000.00)."""
+        return f"₹{self.total_debit_minor / 100.0:,.2f}"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def available_balance_after_rupees(self) -> float:
+        """Available balance after transfer in rupees."""
+        return round(self.available_balance_after_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def available_balance_after_formatted(self) -> str:
+        """Formatted available balance after transfer string in INR."""
+        return f"₹{self.available_balance_after_minor / 100.0:,.2f}"
+
 
 class TransferDetailResponse(BaseModel):
     """Full detail of a bank transaction / transfer."""
@@ -57,6 +111,48 @@ class TransferDetailResponse(BaseModel):
     executed_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def amount(self) -> float:
+        """Amount converted to rupees."""
+        return round(self.amount_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def amount_rupees(self) -> float:
+        """Amount in rupees."""
+        return round(self.amount_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def amount_formatted(self) -> str:
+        """Formatted amount string in INR (e.g. ₹5,000.00)."""
+        return f"₹{self.amount_minor / 100.0:,.2f}"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def fee_rupees(self) -> float:
+        """Fee in rupees."""
+        return round(self.fee_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def total_debit(self) -> float:
+        """Total debit in rupees."""
+        return round(self.total_debit_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def total_debit_rupees(self) -> float:
+        """Total debit in rupees."""
+        return round(self.total_debit_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def total_debit_formatted(self) -> str:
+        """Formatted total debit string in INR (e.g. ₹5,000.00)."""
+        return f"₹{self.total_debit_minor / 100.0:,.2f}"
 
 
 class TransferStatusResponse(BaseModel):
@@ -114,3 +210,27 @@ class LimitsResponse(BaseModel):
     currency: str = "INR"
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def per_transaction_limit_rupees(self) -> float:
+        """Per-transaction limit in rupees."""
+        return round(self.per_transaction_limit_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def daily_limit_rupees(self) -> float:
+        """Daily limit in rupees."""
+        return round(self.daily_limit_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def daily_used_rupees(self) -> float:
+        """Daily used in rupees."""
+        return round(self.daily_used_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def daily_remaining_rupees(self) -> float:
+        """Daily remaining in rupees."""
+        return round(self.daily_remaining_minor / 100.0, 2)

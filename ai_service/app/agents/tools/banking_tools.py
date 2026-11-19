@@ -30,7 +30,15 @@ def _list_accounts(args: dict, client, state) -> dict:
 
 def _get_balance(args: dict, client, state) -> dict:
     account_id = args.get("account_id") if args else None
-    return client.get_balance(account_id)
+    bal = client.get_balance(account_id)
+    if isinstance(bal, dict):
+        avail_minor = bal.get("available_minor")
+        if avail_minor is not None:
+            if "available_rupees" not in bal:
+                bal["available_rupees"] = round(avail_minor / 100.0, 2)
+            if "available_formatted" not in bal:
+                bal["available_formatted"] = f"₹{avail_minor / 100.0:,.2f}"
+    return bal
 
 
 def _list_transactions(args: dict, client, state) -> dict:
@@ -39,7 +47,30 @@ def _list_transactions(args: dict, client, state) -> dict:
         for k in ["from_date", "to_date", "type", "status", "page", "page_size"]
         if args.get(k) is not None
     }
-    return client.list_transactions(**filters)
+    txns = client.list_transactions(**filters)
+    if isinstance(txns, dict) and "items" in txns and isinstance(txns["items"], list):
+        for item in txns["items"]:
+            if isinstance(item, dict):
+                amount_minor = item.get("amount_minor")
+                if amount_minor is not None:
+                    if "amount" not in item:
+                        item["amount"] = round(amount_minor / 100.0, 2)
+                    if "amount_rupees" not in item:
+                        item["amount_rupees"] = round(amount_minor / 100.0, 2)
+                    if "amount_formatted" not in item:
+                        item["amount_formatted"] = f"₹{amount_minor / 100.0:,.2f}"
+                fee_minor = item.get("fee_minor")
+                if fee_minor is not None and "fee_rupees" not in item:
+                    item["fee_rupees"] = round(fee_minor / 100.0, 2)
+                total_minor = item.get("total_debit_minor")
+                if total_minor is not None:
+                    if "total_debit" not in item:
+                        item["total_debit"] = round(total_minor / 100.0, 2)
+                    if "total_debit_rupees" not in item:
+                        item["total_debit_rupees"] = round(total_minor / 100.0, 2)
+                    if "total_debit_formatted" not in item:
+                        item["total_debit_formatted"] = f"₹{total_minor / 100.0:,.2f}"
+    return txns
 
 
 def _list_beneficiaries(args: dict, client, state) -> dict:
@@ -132,6 +163,9 @@ BANKING_READ_TOOLS: list[ToolSpec] = [
             "Use when the user asks 'what is my balance', 'check my balance', or 'how much money do I have'. "
             "It is NOT required to provide account details: if `account_id` is omitted, it will automatically "
             "retrieve the balance of the user's top active account. "
+            "Returns balance with `available_rupees` (in INR) and `available_formatted` (e.g. '₹5,000.00'). "
+            "Note: `available_minor` is in paise (1 INR = 100 paise), so always use `available_rupees` or "
+            "`available_formatted` when describing balance to the user. "
             "Pass `account_id` only if the user specifically asked about a particular account."
         ),
         args_schema={
@@ -155,6 +189,9 @@ BANKING_READ_TOOLS: list[ToolSpec] = [
             "with optional filters and pagination. "
             "Use for 'show my recent transactions', 'what did I spend last week', 'did my payment to X go through', "
             "or 'any failed transfers'. All arguments are optional; with none, it returns the latest page. "
+            "Each transaction returns `amount_rupees` (in INR, e.g. 5000.0) and `amount_formatted` (e.g. '₹5,000.00'). "
+            "IMPORTANT: `amount_minor` is in minor units (paise, where 100 paise = 1 INR). "
+            "Always report amounts to the user in rupees using `amount_rupees` or `amount_formatted`, never as raw minor units. "
             "Convert relative dates ('last month', 'yesterday') into absolute ISO 8601 dates before calling. "
             "Results are paginated: if the user wants more, increase `page` rather than repeating page 1. "
             "Does NOT initiate or modify any transaction, and does NOT list saved payees (use list_beneficiaries)."

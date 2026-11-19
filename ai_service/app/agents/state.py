@@ -59,6 +59,11 @@ class PendingAction(TypedDict, total=False):
 
 
 
+def take_last_value(current: str | None, update: str | None) -> str | None:
+    """Reducer that resolves concurrent writes by taking the latest update."""
+    return update
+
+
 class GraphState(TypedDict, total=False):
     # Identity - set from validated JWT, never from LLM
     user_id: str
@@ -84,8 +89,8 @@ class GraphState(TypedDict, total=False):
     pending_action: PendingAction | None
     approval_status: Literal["NONE", "PENDING", "CONFIRMED", "REJECTED", "EXPIRED"]
     authentication_status: Literal["NONE", "REQUIRED", "COMPLETED", "FAILED"]
-    approval_id: str | None  # PendingApproval.id from AI DB
-    authorization_id: str | None  # Authorization ID from direct Banking API authentication
+    approval_id: Annotated[str | None, take_last_value]  # PendingApproval.id from AI DB
+    authorization_id: Annotated[str | None, take_last_value]  # Authorization ID from direct Banking API authentication
 
     # Output
     transaction_reference: str | None

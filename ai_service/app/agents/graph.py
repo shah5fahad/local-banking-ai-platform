@@ -220,9 +220,14 @@ def resume_graph(
             "access_token": access_token or "",
         }
     }
-    cmd = (
-        resume_payload
-        if isinstance(resume_payload, Command)
-        else Command(resume=resume_payload)
-    )
+    if isinstance(resume_payload, Command):
+        cmd = resume_payload
+    else:
+        update_dict: dict[str, Any] = {}
+        if isinstance(resume_payload, dict):
+            if resume_payload.get("approval_id"):
+                update_dict["approval_id"] = resume_payload["approval_id"]
+            if resume_payload.get("authorization_id"):
+                update_dict["authorization_id"] = resume_payload["authorization_id"]
+        cmd = Command(resume=resume_payload, update=update_dict if update_dict else None)
     return graph.invoke(cmd, config=config)

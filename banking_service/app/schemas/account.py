@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 
 class CreateAccountRequest(BaseModel):
@@ -64,6 +64,18 @@ class AccountResponse(BaseModel):
     status: str
     created_at: datetime
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def balance_rupees(self) -> float:
+        """Account balance in rupees."""
+        return round(self.balance_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def balance_formatted(self) -> str:
+        """Formatted balance in INR (e.g. ₹5,000.00)."""
+        return f"₹{self.balance_minor / 100.0:,.2f}"
+
 
 class UpdateAccountRequest(BaseModel):
     """Request schema for updating non-key account fields."""
@@ -80,6 +92,20 @@ class BalanceResponse(BaseModel):
     available_minor: int
     currency: str
     as_of: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def available_rupees(self) -> float:
+        """Available balance in rupees."""
+        return round(self.available_minor / 100.0, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def available_formatted(self) -> str:
+        """Formatted available balance in INR (e.g. ₹5,000.00)."""
+        return f"₹{self.available_minor / 100.0:,.2f}"
 
     @field_validator("as_of", mode="before")
     @classmethod

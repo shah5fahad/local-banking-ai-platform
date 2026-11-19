@@ -16,7 +16,7 @@ def test_banking_ops_node_fallback_accounts() -> None:
     """Test banking_ops_node fallback when LLM produces no tool calls."""
     state: GraphState = {
         "intent": "BANK_READ",
-        "user_message": "What is my account balance?",
+        "user_message": "List all my linked accounts",
         "messages": [],
     }
     config = {"configurable": {"access_token": "valid-jwt-token"}}
@@ -48,6 +48,34 @@ def test_banking_ops_node_fallback_accounts() -> None:
     assert parsed_data["accounts"][0]["account_number_masked"] == "XXXXXX1234"
 
 
+def test_banking_ops_node_fallback_balance() -> None:
+    """Test banking_ops_node fallback for balance queries."""
+    state: GraphState = {
+        "intent": "BANK_READ",
+        "user_message": "What is my account balance?",
+        "messages": [],
+    }
+    config = {"configurable": {"access_token": "valid-jwt-token"}}
+
+    mock_client = MagicMock()
+    mock_client.get_balance.return_value = {
+        "bank_name": "Test Bank",
+        "available_minor": 7500000,
+        "currency": "INR",
+        "as_of": "19 Nov 2026, 12:00 PM UTC",
+    }
+
+    with patch("app.agents.nodes.banking_ops.BankingClient", return_value=mock_client):
+        result = banking_ops_node(state, config=config)
+
+    tool_res = result["tool_results"][0]
+    assert tool_res["tool_name"] == "get_balance"
+    assert tool_res["success"] is True
+    parsed_data = json.loads(tool_res["result_masked"])
+    assert parsed_data["available_rupees"] == 75000.0
+    assert parsed_data["available_formatted"] == "₹75,000.00"
+
+
 def test_banking_ops_node_fallback_transactions() -> None:
     """Test banking_ops_node fallback for transaction queries."""
     state: GraphState = {
@@ -77,6 +105,9 @@ def test_banking_ops_node_fallback_transactions() -> None:
     tool_res = result["tool_results"][0]
     assert tool_res["tool_name"] == "list_transactions"
     assert tool_res["success"] is True
+    parsed_data = json.loads(tool_res["result_masked"])
+    assert parsed_data["items"][0]["amount_rupees"] == 5000.0
+    assert parsed_data["items"][0]["amount_formatted"] == "₹5,000.00"
 
 
 def test_banking_ops_node_fallback_loan_offers() -> None:

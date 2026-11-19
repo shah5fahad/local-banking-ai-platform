@@ -40,48 +40,124 @@ def approval_gate_node(state: GraphState, config: RunnableConfig) -> dict[str, A
     # 1. Ensure PendingApproval is saved in AI database
     session_factory = get_session_factory()
     with session_factory() as db:
+        from sqlalchemy import select
         from app.db.base import Base
+        from app.models.approval import PendingApproval
+
         Base.metadata.create_all(bind=db.get_bind())
         service = ApprovalService(db)
-        if not approval_id:
-            # Ensure conversation exists to satisfy FK constraint if invoked standalone
-            from app.models.chat import ChatUserReference, Conversation
-            import uuid
+        if approval_id:
+            try:
+                existing_appr = service.get_approval(approval_id)
+                is_terminal = existing_appr.status in (
+                    ApprovalStatus.EXECUTED.value,
+                    ApprovalStatus.REJECTED.value,
+                    ApprovalStatus.EXPIRED.value,
+                    ApprovalStatus.SUPERSEDED.value,
+                )
+                mismatched_resource = bool(
+                    banking_resource_id
+                    and existing_appr.banking_resource_id
+                    and existing_appr.banking_resource_id != banking_resource_id
+                )
+                mismatched_workflow = existing_appr.workflow_type != workflow
 
-            if not conv_id:
-                conv_id = thread_id or str(uuid.uuid4())
-
-            conv = db.get(Conversation, conv_id)
-            if not conv:
-                uid = state.get("user_id") or "default-user"
-                from sqlalchemy import select
-                stmt = select(ChatUserReference).where(ChatUserReference.banking_user_id == uid)
-                user_ref = db.execute(stmt).scalar_one_or_none()
-                if not user_ref:
-                    user_ref = ChatUserReference(
-                        banking_user_id=uid,
-                        role_snapshot="CUSTOMER",
-                        display_name_masked=f"User {uid[-4:] if len(uid) >= 4 else uid}",
+                if is_terminal or mismatched_resource or mismatched_workflow:
+                    logger.info(
+                        "Discarding stale approval_id=%s (status=%s, resource=%s, workflow=%s) for pending_action",
+                        approval_id,
+                        existing_appr.status,
+                        existing_appr.banking_resource_id,
+                        existing_appr.workflow_type,
                     )
-                    db.add(user_ref)
-                    db.commit()
-                    db.refresh(user_ref)
-                conv = Conversation(id=conv_id, user_ref_id=user_ref.id, title="Workflow")
-                db.add(conv)
-                db.commit()
+                    approval_id = None
+                else:
+                    approval = existing_appr
+            except Exception:
+                approval_id = None
 
-            raw_tok = cfg.get("access_token") if cfg else None
-            approval = service.create_approval(
-                conversation_id=conv_id,
-                thread_id=thread_id,
-                workflow_type=workflow,
-                risk_level=pending_action.get("risk_level"),
-                summary_masked=summary_masked,
-                summary_hash=summary_hash,
-                banking_resource_id=banking_resource_id,
-                raw_token=raw_tok,
-            )
-            approval_id = approval.id
+        if not approval_id:
+            # Check if an active PendingApproval already exists for this banking resource or thread
+            existing = None
+            if banking_resource_id:
+                stmt = (
+                    select(PendingApproval)
+                    .where(
+                        PendingApproval.banking_resource_id == banking_resource_id,
+                        PendingApproval.status.in_([
+                            ApprovalStatus.PENDING.value,
+                            ApprovalStatus.CONFIRMED.value,
+                            ApprovalStatus.AUTH_REQUIRED.value,
+                            ApprovalStatus.AUTHENTICATED.value,
+                        ]),
+                    )
+                    .order_by(PendingApproval.created_at.desc())
+                )
+                existing = db.execute(stmt).scalars().first()
+
+            if not existing and thread_id:
+                stmt = (
+                    select(PendingApproval)
+                    .where(
+                        PendingApproval.thread_id == thread_id,
+                        PendingApproval.workflow_type == workflow,
+                        PendingApproval.status.in_([
+                            ApprovalStatus.PENDING.value,
+                            ApprovalStatus.CONFIRMED.value,
+                            ApprovalStatus.AUTH_REQUIRED.value,
+                            ApprovalStatus.AUTHENTICATED.value,
+                        ]),
+                    )
+                    .order_by(PendingApproval.created_at.desc())
+                )
+                if banking_resource_id:
+                    stmt = stmt.where(
+                        (PendingApproval.banking_resource_id == banking_resource_id)
+                        | (PendingApproval.banking_resource_id.is_(None))
+                    )
+                existing = db.execute(stmt).scalars().first()
+
+            if existing:
+                approval = existing
+                approval_id = approval.id
+            else:
+                # Ensure conversation exists to satisfy FK constraint if invoked standalone
+                from app.models.chat import ChatUserReference, Conversation
+                import uuid
+
+                if not conv_id:
+                    conv_id = thread_id or str(uuid.uuid4())
+
+                conv = db.get(Conversation, conv_id)
+                if not conv:
+                    uid = state.get("user_id") or "default-user"
+                    stmt = select(ChatUserReference).where(ChatUserReference.banking_user_id == uid)
+                    user_ref = db.execute(stmt).scalar_one_or_none()
+                    if not user_ref:
+                        user_ref = ChatUserReference(
+                            banking_user_id=uid,
+                            role_snapshot="CUSTOMER",
+                            display_name_masked=f"User {uid[-4:] if len(uid) >= 4 else uid}",
+                        )
+                        db.add(user_ref)
+                        db.commit()
+                        db.refresh(user_ref)
+                    conv = Conversation(id=conv_id, user_ref_id=user_ref.id, title="Workflow")
+                    db.add(conv)
+                    db.commit()
+
+                raw_tok = cfg.get("access_token") if cfg else None
+                approval = service.create_approval(
+                    conversation_id=conv_id,
+                    thread_id=thread_id,
+                    workflow_type=workflow,
+                    risk_level=pending_action.get("risk_level"),
+                    summary_masked=summary_masked,
+                    summary_hash=summary_hash,
+                    banking_resource_id=banking_resource_id,
+                    raw_token=raw_tok,
+                )
+                approval_id = approval.id
         else:
             approval = service.get_approval(approval_id)
 
@@ -138,8 +214,11 @@ def approval_gate_node(state: GraphState, config: RunnableConfig) -> dict[str, A
 
             rejection_msg = "No action was taken. The request has been cancelled."
             return {
-                "approval_id": approval_id,
+                "approval_id": None,
+                "authorization_id": None,
+                "pending_action": None,
                 "approval_status": ApprovalStatus.REJECTED.value,
+                "authentication_status": "NONE",
                 "response": rejection_msg,
                 "messages": [AIMessage(content=rejection_msg)],
             }

@@ -18,6 +18,19 @@ def render_approval_card(approval_data: dict[str, Any]) -> None:
     approval_id = approval_data.get("approval_id") or approval_data.get("id")
     workflow = str(approval_data.get("workflow", "TRANSACTION")).upper()
     status = str(approval_data.get("status", "PENDING")).upper()
+
+    if status in ("EXECUTED", "REJECTED", "EXPIRED", "SUPERSEDED"):
+        if "pending_approval" in st.session_state:
+            del st.session_state["pending_approval"]
+        st.session_state.pending_approval = None
+        if status == "EXECUTED":
+            st.success("✅ This transaction has already been completed.")
+        elif status == "REJECTED":
+            st.info("ℹ️ This transaction request has been cancelled.")
+        else:
+            st.warning(f"⚠️ This transaction request has {status.lower()}.")
+        return
+
     summary = approval_data.get("summary") or approval_data.get("summary_masked") or {}
     expires_at_str = approval_data.get("expires_at")
     risk_level = approval_data.get("risk_level", "FINANCIAL")
@@ -103,6 +116,16 @@ def render_approval_card(approval_data: dict[str, Any]) -> None:
                         # Launch modal PIN dialog
                         render_pin_modal_dialog(approval_data)
                     else:
+                        ai_message = dec_res.get("response")
+                        if not ai_message:
+                            wf_label = workflow.replace("_", " ").title()
+                            ai_message = f"✅ {wf_label} has been confirmed and executed successfully."
+                        if "chat_messages" not in st.session_state:
+                            st.session_state.chat_messages = []
+                        st.session_state.chat_messages.append({
+                            "role": "assistant",
+                            "content": ai_message,
+                        })
                         st.success("Approval confirmed and executed successfully!")
                         if "pending_approval" in st.session_state:
                             del st.session_state["pending_approval"]
@@ -121,10 +144,32 @@ def render_approval_card(approval_data: dict[str, Any]) -> None:
                 ai_client = get_ai_client()
                 try:
                     with st.spinner("Rejecting transaction..."):
-                        ai_client.decide_approval(approval_id, "REJECT", token)
+                        dec_res = ai_client.decide_approval(approval_id, "REJECT", token)
                         if "pending_approval" in st.session_state:
                             del st.session_state["pending_approval"]
-                        st.info("Transaction was rejected. Draft has been cancelled.")
+                        rejection_msg = (
+                            dec_res.get("response")
+                            or "No action was taken. The transaction request has been cancelled."
+                        )
+                        if "chat_messages" not in st.session_state:
+                            st.session_state.chat_messages = []
+                        st.session_state.chat_messages.append({
+                            "role": "assistant",
+                            "content": rejection_msg,
+                        })
+                        st.info(rejection_msg)
                         st.rerun()
                 except Exception as e:
-                    st.error(f"Error rejecting transaction: {e}")
+                    if "pending_approval" in st.session_state:
+                        del st.session_state["pending_approval"]
+                    st.session_state.pending_approval = None
+                    err_msg = str(e)
+                    if "EXECUTED" in err_msg or "already executed" in err_msg.lower():
+                        st.warning("⚠️ This transaction was already executed and cannot be cancelled.")
+                    elif "EXPIRED" in err_msg or "expired" in err_msg.lower():
+                        st.warning("⚠️ This transaction request has already expired.")
+                    elif "REJECTED" in err_msg or "already rejected" in err_msg.lower():
+                        st.info("ℹ️ This transaction request has already been cancelled.")
+                    else:
+                        st.error(f"Error rejecting transaction: {e}")
+                    st.rerun()

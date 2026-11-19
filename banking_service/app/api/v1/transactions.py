@@ -21,8 +21,10 @@ def list_transactions(
     from_date: Optional[datetime] = Query(None, description="Start created_at timestamp"),
     to_date: Optional[datetime] = Query(None, description="End created_at timestamp"),
     type: Optional[str] = Query(None, description="Transaction type filter (e.g. TRANSFER, CARD_PAYMENT)"),
-    min_amount_minor: Optional[int] = Query(None, ge=0, description="Minimum amount in minor units"),
-    max_amount_minor: Optional[int] = Query(None, ge=0, description="Maximum amount in minor units"),
+    min_amount_minor: Optional[int] = Query(None, ge=0, description="Minimum amount in minor units (paise)"),
+    max_amount_minor: Optional[int] = Query(None, ge=0, description="Maximum amount in minor units (paise)"),
+    min_amount: Optional[float] = Query(None, ge=0, description="Minimum amount in rupees"),
+    max_amount: Optional[float] = Query(None, ge=0, description="Maximum amount in rupees"),
     status: Optional[str] = Query(None, description="Status filter (e.g. COMPLETED, PENDING_APPROVAL)"),
     beneficiary_id: Optional[str] = Query(None, description="Beneficiary UUID filter"),
     reference: Optional[str] = Query(None, description="Transaction reference filter"),
@@ -31,12 +33,14 @@ def list_transactions(
 ) -> TransactionListResponse:
     """List transactions for current user with filtering, sorting, and pagination."""
     repo = TransactionRepository(db)
+    effective_min_minor = min_amount_minor if min_amount_minor is not None else (int(round(min_amount * 100)) if min_amount is not None else None)
+    effective_max_minor = max_amount_minor if max_amount_minor is not None else (int(round(max_amount * 100)) if max_amount is not None else None)
     filters = {
         "from_date": from_date,
         "to_date": to_date,
         "type": type,
-        "min_amount_minor": min_amount_minor,
-        "max_amount_minor": max_amount_minor,
+        "min_amount_minor": effective_min_minor,
+        "max_amount_minor": effective_max_minor,
         "status": status,
         "beneficiary_id": beneficiary_id,
         "reference": reference,

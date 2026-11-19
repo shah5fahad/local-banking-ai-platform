@@ -171,8 +171,12 @@ for msg in st.session_state.chat_messages:
             
 # Render Active Approval Card if one exists
 if st.session_state.pending_approval:
-    st.markdown("### ⚠️ Action Required: Pending Approval")
-    render_approval_card(st.session_state.pending_approval)
+    appr_status = str(st.session_state.pending_approval.get("status", "PENDING")).upper()
+    if appr_status in ("EXECUTED", "REJECTED", "EXPIRED", "SUPERSEDED"):
+        st.session_state.pending_approval = None
+    else:
+        st.markdown("### ⚠️ Action Required: Pending Approval")
+        render_approval_card(st.session_state.pending_approval)
 
 # Handle Chat Input & Streaming Response
 user_prompt = st.chat_input("Type your message or banking instruction...")

@@ -155,7 +155,22 @@ def render_pin_modal_dialog(
                 # Clear pending approval state from session
                 if "pending_approval" in st.session_state:
                     del st.session_state["pending_approval"]
+                st.session_state.pending_approval = None
                 st.session_state["approval_executed"] = True
+
+                # Append AI completion message to chat history
+                ai_message = resume_res.get("response")
+                if not ai_message:
+                    wf_label = workflow.replace("_", " ").title()
+                    status_label = resume_res.get("status", "EXECUTED")
+                    ai_message = f"✅ {wf_label} transaction completed successfully! (Status: {status_label})"
+
+                if "chat_messages" not in st.session_state:
+                    st.session_state.chat_messages = []
+                st.session_state.chat_messages.append({
+                    "role": "assistant",
+                    "content": ai_message,
+                })
 
                 st.success(f"Transaction completed! Status: {resume_res.get('status', 'EXECUTED')}")
                 st.rerun()
