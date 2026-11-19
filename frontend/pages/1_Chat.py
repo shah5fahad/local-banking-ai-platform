@@ -158,12 +158,6 @@ if token and st.session_state.active_conversation_id and not st.session_state.pe
     except Exception:
         pass
 
-# Render Active Approval Card if one exists
-if st.session_state.pending_approval:
-    st.markdown("### ⚠️ Action Required: Pending Approval")
-    render_approval_card(st.session_state.pending_approval)
-    st.markdown("---")
-
 # Render Chat History
 for msg in st.session_state.chat_messages:
     role = msg.get("role", "user")
@@ -174,6 +168,11 @@ for msg in st.session_state.chat_messages:
         st.markdown(content)
         if citations and isinstance(citations, list):
             render_citations(citations)
+            
+# Render Active Approval Card if one exists
+if st.session_state.pending_approval:
+    st.markdown("### ⚠️ Action Required: Pending Approval")
+    render_approval_card(st.session_state.pending_approval)
 
 # Handle Chat Input & Streaming Response
 user_prompt = st.chat_input("Type your message or banking instruction...")

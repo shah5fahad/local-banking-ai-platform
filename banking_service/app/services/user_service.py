@@ -11,6 +11,7 @@ from app.models.user import User
 from app.repositories.account_repository import AccountRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.user import UpdateUserRequest
+from app.services.audit_service import AuditService
 
 if TYPE_CHECKING:
     from app.core.config import BankingSettings
@@ -96,6 +97,17 @@ class UserService:
             raise NotFoundError("User", user_id)
 
         if not verify_password(password, user.password_hash):
+            AuditService.log(
+                db=db,
+                actor_user_id=user_id,
+                actor_type="USER",
+                action="USER_PIN_UPDATE",
+                resource_type="USER",
+                resource_id=user_id,
+                outcome="FAILURE",
+                details={"reason": "Account password verification failed"},
+            )
+            db.commit()
             raise BankingError(
                 "INVALID_CREDENTIALS",
                 "Account password verification failed",
@@ -104,6 +116,16 @@ class UserService:
 
         user.transaction_pin_hash = hash_pin(pin)
         repo.update(user)
+        AuditService.log(
+            db=db,
+            actor_user_id=user_id,
+            actor_type="USER",
+            action="USER_PIN_UPDATE",
+            resource_type="USER",
+            resource_id=user_id,
+            outcome="SUCCESS",
+            details={"message": "Transaction PIN updated successfully"},
+        )
         db.commit()
 
     @staticmethod

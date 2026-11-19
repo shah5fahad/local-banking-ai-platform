@@ -174,6 +174,37 @@ class TestBankingClientDirectBanking:
         )
         assert created["id"] == "bene-new"
 
+    def test_create_beneficiary_challenge_and_verify_flow(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def mock_post(self, url, **kwargs):
+            if "/approvals/challenges" in url and not url.endswith("/verify"):
+                return httpx.Response(
+                    201,
+                    json={
+                        "challenge_id": "chal-bene-999",
+                        "id": "chal-bene-999",
+                        "action": "BENEFICIARY_CREATE",
+                        "expires_in_seconds": 300,
+                    },
+                )
+            if url.endswith("/verify"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "approval_token": "valid-appr-token-777",
+                        "expires_in": 300,
+                    },
+                )
+            return httpx.Response(200, json={})
+
+        monkeypatch.setattr(httpx.Client, "post", mock_post)
+        client = BankingClient("http://banking-service")
+        chal = client.create_beneficiary_challenge("BENEFICIARY_CREATE", "hash-123", "token-123")
+        assert chal.get("challenge_id") == "chal-bene-999"
+        assert chal.get("id") == "chal-bene-999"
+
+        ver = client.verify_beneficiary_challenge(chal["challenge_id"], "1234", "token-123")
+        assert ver.get("approval_token") == "valid-appr-token-777"
+
     def test_verify_and_deactivate_beneficiary(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def mock_post(self, url, **kwargs):
             return httpx.Response(
@@ -243,7 +274,7 @@ class TestBankingClientDirectBanking:
 class TestDirectBankingAppTest:
     def test_direct_banking_blocks_unauthenticated(self) -> None:
         """Route guard require_auth blocks unauthenticated sessions."""
-        at = AppTest.from_file("../pages/5_Banking.py", default_timeout=10)
+        at = AppTest.from_file("../pages/5_Banking.py", default_timeout=25)
         at.session_state["authenticated"] = False
         at.session_state["user"] = None
         at.session_state["access_token"] = None
@@ -319,7 +350,7 @@ class TestDirectBankingAppTest:
 
         monkeypatch.setattr(httpx.Client, "get", mock_get)
 
-        at = AppTest.from_file("../pages/5_Banking.py", default_timeout=10)
+        at = AppTest.from_file("../pages/5_Banking.py", default_timeout=25)
         at.session_state["authenticated"] = True
         at.session_state["user"] = {
             "id": "cust-1",

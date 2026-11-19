@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class CreateBeneficiaryRequest(BaseModel):
@@ -91,6 +92,23 @@ class ChallengeResponse(BaseModel):
     challenge_id: str
     action: str
     expires_in_seconds: int
+    id: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def set_id_alias(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            cid = data.get("challenge_id") or data.get("id")
+            if cid:
+                data["challenge_id"] = cid
+                data["id"] = cid
+        return data
+
+    @model_validator(mode="after")
+    def sync_id(self) -> ChallengeResponse:
+        if not self.id:
+            self.id = self.challenge_id
+        return self
 
 
 class VerifyChallengeRequest(BaseModel):

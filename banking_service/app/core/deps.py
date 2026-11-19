@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import BankingSettings, get_settings
 from app.core.errors import ForbiddenError, UnauthorizedError
-from app.core.security import decode_token
+from app.core.security import decode_token, to_utc
 from app.db.session import get_db
 from app.models.user import User
 
@@ -44,7 +44,8 @@ async def get_current_user(
     if not user.is_active:
         raise ForbiddenError("User account is inactive")
 
-    if user.locked_until and user.locked_until > datetime.now(timezone.utc):
+    locked_until = to_utc(user.locked_until)
+    if locked_until and locked_until > datetime.now(timezone.utc):
         raise ForbiddenError("User account is temporarily locked")
 
     # Store caller information on request state for auditing

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import BankingSettings
 from app.core.errors import BankingError, ConflictError, NotFoundError
+from app.core.security import to_utc
 from app.models.loan import LoanApplication, LoanOffer
 from app.repositories.loan_repository import LoanRepository
 from app.schemas.loan import EligibilityRequest, LoanApplicationRequest
@@ -149,7 +150,8 @@ class LoanService:
             offer = repo.get_offer(offer_id, user_id=user_id)
             if not offer:
                 raise NotFoundError("Loan offer", offer_id)
-            if offer.status != "ACTIVE" or offer.valid_till < datetime.now(timezone.utc):
+            offer_valid = to_utc(offer.valid_till)
+            if offer.status != "ACTIVE" or (offer_valid and offer_valid < datetime.now(timezone.utc)):
                 raise ConflictError("Selected loan offer is no longer valid or active")
             rate_bps = offer.rate_bps
 

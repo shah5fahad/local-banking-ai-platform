@@ -1,9 +1,11 @@
 """State package for frontend session handling."""
 from state.session import (
     check_idle_timeout,
+    delete_cookie,
     get_access_token,
     get_ai_client,
     get_banking_client,
+    get_cookie,
     get_current_roles,
     get_current_user,
     has_role,
@@ -14,13 +16,17 @@ from state.session import (
     refresh_access_token_if_needed,
     require_auth,
     require_roles,
+    restore_session_from_cookies,
+    set_cookie,
 )
 
 __all__ = [
     "check_idle_timeout",
+    "delete_cookie",
     "get_access_token",
     "get_ai_client",
     "get_banking_client",
+    "get_cookie",
     "get_current_roles",
     "get_current_user",
     "has_role",
@@ -31,4 +37,6 @@ __all__ = [
     "refresh_access_token_if_needed",
     "require_auth",
     "require_roles",
+    "restore_session_from_cookies",
+    "set_cookie",
 ]

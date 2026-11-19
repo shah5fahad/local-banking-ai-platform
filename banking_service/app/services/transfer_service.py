@@ -17,7 +17,7 @@ from app.core.errors import (
     ForbiddenError,
     NotFoundError,
 )
-from app.core.security import sha256_hash, verify_pin
+from app.core.security import sha256_hash, to_utc, verify_pin
 from app.models.account import BankAccount
 from app.models.beneficiary import Beneficiary
 from app.models.transaction import BankTransaction, TransferAuthorization
@@ -76,10 +76,10 @@ class TransferService:
             raise NotFoundError("Beneficiary", data.beneficiary_id)
         if beneficiary.status != "ACTIVE":
             raise ConflictError("Beneficiary is not ACTIVE")
-        if beneficiary.approval_status != "VERIFIED":
+        if beneficiary.approval_status != "APPROVED":
             raise BankingError(
-                error_code="BENEFICIARY_NOT_VERIFIED",
-                message="Beneficiary is not VERIFIED for transfers",
+                error_code="BENEFICIARY_NOT_APPROVED",
+                message=f"Beneficiary is not APPROVED for transfers {beneficiary.approval_status}",
                 http_status=422,
             )
 
@@ -192,7 +192,8 @@ class TransferService:
             raise NotFoundError("Transfer", txn_id)
 
         now = datetime.now(timezone.utc)
-        if txn.expires_at and txn.expires_at < now:
+        txn_exp = to_utc(txn.expires_at)
+        if txn_exp and txn_exp < now:
             repo.update_status(txn.id, "EXPIRED", failure_reason="Transfer approval expired")
             raise BankingError(
                 error_code="AUTHORIZATION_EXPIRED",
@@ -212,8 +213,10 @@ class TransferService:
 
         # Check existing authorization
         existing_auth = repo.get_authorization(txn.id)
-        if existing_auth and existing_auth.status == "ISSUED" and existing_auth.expires_at > now:
-            return existing_auth
+        if existing_auth and existing_auth.status == "ISSUED":
+            auth_exp = to_utc(existing_auth.expires_at)
+            if auth_exp and auth_exp > now:
+                return existing_auth
 
         challenge_secret = secrets.token_hex(16)
         challenge_hash = sha256_hash(challenge_secret)
@@ -259,7 +262,8 @@ class TransferService:
             raise NotFoundError("Transfer", txn_id)
 
         now = datetime.now(timezone.utc)
-        if txn.expires_at and txn.expires_at < now:
+        txn_exp = to_utc(txn.expires_at)
+        if txn_exp and txn_exp < now:
             repo.update_status(txn.id, "EXPIRED", failure_reason="Transfer expired")
             raise BankingError(
                 error_code="AUTHORIZATION_EXPIRED",
@@ -284,7 +288,8 @@ class TransferService:
         if auth.status != "ISSUED":
             raise ConflictError(f"Authorization is {auth.status}, cannot verify")
 
-        if auth.expires_at < now:
+        auth_exp = to_utc(auth.expires_at)
+        if auth_exp and auth_exp < now:
             repo.update_authorization(auth.id, "EXPIRED")
             raise BankingError(
                 error_code="AUTHORIZATION_EXPIRED",
@@ -379,7 +384,8 @@ class TransferService:
             return txn
 
         now = datetime.now(timezone.utc)
-        if txn.expires_at and txn.expires_at < now:
+        txn_exp = to_utc(txn.expires_at)
+        if txn_exp and txn_exp < now:
             repo.update_status(txn.id, "EXPIRED", failure_reason="Transfer expired prior to execution")
             raise BankingError(
                 error_code="AUTHORIZATION_EXPIRED",
@@ -408,7 +414,8 @@ class TransferService:
             )
         if auth.status != "VERIFIED":
             raise ConflictError(f"Authorization is {auth.status}; must be VERIFIED")
-        if auth.expires_at < now:
+        auth_exp = to_utc(auth.expires_at)
+        if auth_exp and auth_exp < now:
             repo.update_authorization(auth.id, "EXPIRED")
             raise BankingError(
                 error_code="AUTHORIZATION_EXPIRED",

@@ -45,6 +45,7 @@ def test_customer_dashboard_returns_accounts_cards_and_loans(test_client: TestCl
             "phone": "+919876543299",
             "full_name": "Dashboard Customer",
             "password": "StrongPassword123!",
+            "pin": "1234",
         },
     )
     assert reg_resp.status_code == 201

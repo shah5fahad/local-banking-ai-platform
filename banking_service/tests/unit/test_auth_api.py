@@ -45,12 +45,14 @@ def test_register_login_refresh_logout_flow(test_client: TestClient) -> None:
             "phone": "+919876543210",
             "full_name": "Test User",
             "password": "StrongPassword123!",
+            "pin": "1234",
         },
     )
     assert reg_resp.status_code == 201
     reg_data = reg_resp.json()
     assert reg_data["email"] == "user@example.com"
     assert "id" in reg_data
+    assert reg_data.get("transaction_pin_set") is True
     assert reg_data.get("account_id") is not None
     assert reg_data.get("account_number_masked") is not None
     assert reg_data.get("account") is not None
@@ -78,6 +80,7 @@ def test_register_login_refresh_logout_flow(test_client: TestClient) -> None:
             "phone": "+919876543211",
             "full_name": "Test User 2",
             "password": "StrongPassword123!",
+            "pin": "1234",
         },
     )
     assert dup_resp.status_code == 409
@@ -90,6 +93,7 @@ def test_register_login_refresh_logout_flow(test_client: TestClient) -> None:
             "phone": "+919876543299",
             "full_name": "Weak User",
             "password": "short",
+            "pin": "1234",
         },
     )
     assert weak_resp.status_code == 422
@@ -194,6 +198,7 @@ def test_login_and_register_with_local_domain(test_client: TestClient) -> None:
             "phone": "+919876543210",
             "full_name": "Local User",
             "password": "StrongPassword123!",
+            "pin": "1234",
         },
     )
     assert reg_resp.status_code == 201
@@ -207,3 +212,48 @@ def test_login_and_register_with_local_domain(test_client: TestClient) -> None:
     )
     assert login_resp.status_code == 200
     assert "access_token" in login_resp.json()
+
+
+def test_register_with_pin_endpoint(test_client: TestClient) -> None:
+    resp = test_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "withpin@bank.local",
+            "phone": "+919876543333",
+            "full_name": "With Pin",
+            "password": "StrongPassword123!",
+            "pin": "1234",
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["email"] == "withpin@bank.local"
+    assert data["transaction_pin_set"] is True
+
+
+def test_register_with_invalid_pin_endpoint(test_client: TestClient) -> None:
+    resp = test_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "badpin@bank.local",
+            "phone": "+919876543334",
+            "full_name": "Bad Pin",
+            "password": "StrongPassword123!",
+            "pin": "12",  # Less than 4 digits
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_register_without_pin_endpoint_fails(test_client: TestClient) -> None:
+    resp = test_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "nopin@bank.local",
+            "phone": "+919876543335",
+            "full_name": "No Pin",
+            "password": "StrongPassword123!",
+        },
+    )
+    assert resp.status_code == 422
+

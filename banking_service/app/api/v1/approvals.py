@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, status
 
 from app.core.deps import AppSettings, CurrentUser, DbSession, RequireCustomerOnly
+from app.core.security import to_utc
 from app.schemas.beneficiary import (
     ChallengeRequest,
     ChallengeResponse,
@@ -38,9 +39,11 @@ def create_challenge(
         settings=settings,
     )
     now = datetime.now(UTC)
-    remaining_secs = max(0, int((challenge.expires_at - now).total_seconds()))
+    expires_at = to_utc(challenge.expires_at) or now
+    remaining_secs = max(0, int((expires_at - now).total_seconds()))
     return ChallengeResponse(
         challenge_id=challenge.id,
+        id=challenge.id,
         action=challenge.action,
         expires_in_seconds=remaining_secs,
     )

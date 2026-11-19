@@ -82,15 +82,18 @@ class BankingClient:
         phone: str,
         full_name: str,
         password: str,
+        pin: Optional[str] = None,
     ) -> dict[str, Any]:
         """Register a new customer account."""
         url = f"{self.base_url}/auth/register"
-        payload = {
+        payload: dict[str, Any] = {
             "email": email.strip(),
             "phone": phone.strip(),
             "full_name": full_name.strip(),
             "password": password,
         }
+        if pin is not None and pin.strip():
+            payload["pin"] = pin.strip()
         with httpx.Client(timeout=self.timeout) as client:
             resp = client.post(url, json=payload)
             return self._handle_response(resp)
@@ -129,6 +132,57 @@ class BankingClient:
         headers = {"Authorization": f"Bearer {access_token}"}
         with httpx.Client(timeout=self.timeout) as client:
             resp = client.get(url, headers=headers)
+            return self._handle_response(resp)
+
+    def set_transaction_pin(
+        self,
+        *args: Any,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Reset or configure transaction PIN by verifying account password.
+
+        Supports flexible call signatures:
+          set_transaction_pin(access_token, current_password, new_pin, confirm_pin=None)
+          set_transaction_pin(current_password, new_pin, access_token, confirm_pin=None)
+          set_transaction_pin(token=..., password=..., pin=...)
+        """
+        token = kwargs.get("access_token") or kwargs.get("token")
+        password = kwargs.get("current_password") or kwargs.get("password")
+        pin = kwargs.get("new_pin") or kwargs.get("pin")
+        confirm_pin = kwargs.get("confirm_pin")
+
+        if args:
+            if len(args) == 3:
+                a, b, c = args
+                if isinstance(a, str) and a.count(".") == 2:
+                    token, password, pin = a, b, c
+                elif isinstance(c, str) and c.count(".") == 2:
+                    password, pin, token = a, b, c
+                elif len(str(c)) > len(str(a)) and len(str(c)) > 20:
+                    password, pin, token = a, b, c
+                else:
+                    token, password, pin = a, b, c
+            elif len(args) >= 4:
+                a, b, c, d = args[:4]
+                if isinstance(a, str) and a.count(".") == 2:
+                    token, password, pin, confirm_pin = a, b, c, d
+                else:
+                    password, pin, token, confirm_pin = a, b, c, d
+
+        if not token or not password or not pin:
+            raise ValueError("access_token, password, and pin are required to set transaction PIN.")
+
+        url = f"{self.base_url}/users/pin"
+        headers = {"Authorization": f"Bearer {token}"}
+        payload: dict[str, Any] = {
+            "current_password": password,
+            "new_pin": str(pin).strip(),
+        }
+        if confirm_pin is not None and str(confirm_pin).strip():
+            payload["confirm_pin"] = str(confirm_pin).strip()
+
+        with httpx.Client(timeout=self.timeout) as client:
+            resp = client.post(url, json=payload, headers=headers)
             return self._handle_response(resp)
     def get_sessions(self, access_token: str) -> list[dict[str, Any]]:
         """List active sessions for current user."""

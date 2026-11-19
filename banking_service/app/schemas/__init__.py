@@ -18,7 +18,10 @@ from app.schemas.beneficiary import (
 )
 from app.schemas.user import (
     ChangePasswordRequest,
+    ResetPinRequest,
+    ResetPinResponse,
     SetPinRequest,
+    SetPinResponse,
     UpdateUserRequest,
     UserResponse,
     UserSummaryResponse,
@@ -29,6 +32,9 @@ __all__ = [
     "UpdateUserRequest",
     "ChangePasswordRequest",
     "SetPinRequest",
+    "SetPinResponse",
+    "ResetPinRequest",
+    "ResetPinResponse",
     "UserSummaryResponse",
     "CreateAccountRequest",
     "AccountResponse",

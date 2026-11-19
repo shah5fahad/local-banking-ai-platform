@@ -11,7 +11,9 @@ from streamlit.runtime.scriptrunner.script_runner import StopException
 from clients.banking_client import BankingClient
 from state.session import (
     check_idle_timeout,
+    delete_cookie,
     get_access_token,
+    get_cookie,
     get_current_roles,
     get_current_user,
     has_role,
@@ -22,6 +24,8 @@ from state.session import (
     refresh_access_token_if_needed,
     require_auth,
     require_roles,
+    restore_session_from_cookies,
+    set_cookie,
 )
 
 
@@ -154,3 +158,86 @@ class TestRouteGuards:
         login_user({"access_token": "tok", "refresh_token": "ref"}, {"roles": ["AUDITOR"]})
         # Documents page allows ADMIN or AUDITOR
         require_roles("ADMIN", "AUDITOR")
+
+
+class TestCookieSessionRestoration:
+    def test_restore_session_with_valid_access_token_cookie(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cookie_jar = {
+            "access_token": "valid_cookie_access_token",
+            "refresh_token": "valid_cookie_refresh_token",
+            "session_last_activity": str(time.time()),
+        }
+        monkeypatch.setattr("state.session.get_cookie", lambda name: cookie_jar.get(name))
+
+        mock_client = MagicMock()
+        mock_client.get_me.return_value = {
+            "id": "usr-cookie-1",
+            "email": "cookie_user@bank.local",
+            "full_name": "Cookie Customer",
+            "roles": ["CUSTOMER"],
+        }
+        monkeypatch.setattr("state.session.get_banking_client", lambda: mock_client)
+
+        assert restore_session_from_cookies() is True
+        assert is_authenticated() is True
+        assert get_access_token() == "valid_cookie_access_token"
+        assert get_current_user()["email"] == "cookie_user@bank.local"
+        assert get_current_roles() == ["CUSTOMER"]
+
+    def test_restore_session_rotates_expired_access_token_using_refresh_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cookie_jar = {
+            "access_token": "expired_token",
+            "refresh_token": "valid_refresh_token",
+            "session_last_activity": str(time.time()),
+        }
+        set_cookies_called = {}
+        monkeypatch.setattr("state.session.get_cookie", lambda name: cookie_jar.get(name))
+        monkeypatch.setattr("state.session.set_cookie", lambda k, v, **kw: set_cookies_called.update({k: v}))
+
+        mock_client = MagicMock()
+        mock_client.get_me.side_effect = [
+            Exception("Token expired"),
+            {"id": "usr-rotated", "email": "rotated@bank.local", "roles": ["ADMIN"]},
+        ]
+        mock_client.refresh.return_value = {
+            "access_token": "new_rotated_access_token",
+            "refresh_token": "new_rotated_refresh_token",
+        }
+        monkeypatch.setattr("state.session.get_banking_client", lambda: mock_client)
+
+        assert restore_session_from_cookies() is True
+        assert is_authenticated() is True
+        assert get_access_token() == "new_rotated_access_token"
+        assert has_role("ADMIN") is True
+        assert set_cookies_called.get("access_token") == "new_rotated_access_token"
+
+    def test_restore_session_fails_when_tokens_are_invalid_and_cleans_cookies(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cookie_jar = {
+            "access_token": "bad_token",
+            "refresh_token": "bad_refresh",
+        }
+        deleted_cookies = set()
+        monkeypatch.setattr("state.session.get_cookie", lambda name: cookie_jar.get(name))
+        monkeypatch.setattr("state.session.delete_cookie", lambda name: deleted_cookies.add(name))
+
+        mock_client = MagicMock()
+        mock_client.get_me.side_effect = Exception("401 Unauthorized")
+        mock_client.refresh.side_effect = Exception("401 Unauthorized")
+        monkeypatch.setattr("state.session.get_banking_client", lambda: mock_client)
+
+        assert restore_session_from_cookies() is False
+        assert is_authenticated() is False
+        assert "access_token" in deleted_cookies
+        assert "refresh_token" in deleted_cookies
+
+    def test_restore_session_fails_when_timed_out(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cookie_jar = {
+            "access_token": "valid_tok",
+            "session_last_activity": str(time.time() - 3600),  # 1 hour ago
+        }
+        monkeypatch.setattr("state.session.get_cookie", lambda name: cookie_jar.get(name))
+
+        assert restore_session_from_cookies() is False
+        assert is_authenticated() is False
+        assert st.session_state.timed_out is True
+

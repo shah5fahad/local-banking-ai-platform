@@ -281,7 +281,10 @@ def render_beneficiaries_tab(banking_client: BankingClient, access_token: str) -
                         payload_hash=payload_hash,
                         access_token=access_token,
                     )
-                    challenge_id = challenge["id"]
+                    challenge_id = challenge.get("challenge_id") or challenge.get("id")
+                    if not challenge_id:
+                        st.error("Failed to obtain beneficiary challenge from Banking service.")
+                        return
 
                     # 3. Direct-to-banking: Verify PIN directly to obtain approval token
                     verify_res = banking_client.verify_beneficiary_challenge(
@@ -289,7 +292,10 @@ def render_beneficiaries_tab(banking_client: BankingClient, access_token: str) -
                         pin=b_pin,
                         access_token=access_token,
                     )
-                    approval_token = verify_res["approval_token"]
+                    approval_token = verify_res.get("approval_token")
+                    if not approval_token:
+                        st.error("Failed to obtain approval token from verification.")
+                        return
 
                     # 4. Create beneficiary with X-Approval-Token
                     created = banking_client.create_beneficiary(
@@ -403,6 +409,69 @@ def render_history_tab(banking_client: BankingClient, access_token: str) -> None
                 st.error(f"Lookup error: {ex}")
 
 
+def render_pin_management_section(banking_client: BankingClient, access_token: str) -> None:
+    """Render transaction PIN setup and regeneration card."""
+    with st.expander("🔐 Security Settings: Change / Reset Transaction PIN", expanded=False):
+        st.markdown("#### Transaction PIN Management")
+        st.caption(
+            "Your transaction PIN authorizes high-value transfers, bill payments, and adding beneficiaries. "
+            "You can update or regenerate your 4-6 digit numeric PIN anytime by verifying your account login password."
+        )
+
+        with st.form("reset_pin_form", clear_on_submit=False):
+            curr_pass = st.text_input(
+                "Current Account Password",
+                type="password",
+                placeholder="Enter your current password",
+                key="direct_banking_current_password",
+            )
+            new_pin = st.text_input(
+                "New Transaction PIN (4-6 digits)",
+                type="password",
+                placeholder="e.g. 1234 or 123456",
+                max_chars=6,
+                key="direct_banking_new_pin",
+            )
+            confirm_pin = st.text_input(
+                "Confirm New PIN",
+                type="password",
+                placeholder="Re-enter new 4-6 digit PIN",
+                max_chars=6,
+                key="direct_banking_confirm_pin",
+            )
+            btn_update = st.form_submit_button("Update Transaction PIN", type="primary", use_container_width=True)
+
+        if btn_update:
+            if not curr_pass or not new_pin or not confirm_pin:
+                st.error("Please fill in all fields (current password, new PIN, and confirmation).")
+                return
+
+            cleaned_pin = new_pin.strip()
+            cleaned_confirm = confirm_pin.strip()
+
+            if not cleaned_pin.isdigit() or len(cleaned_pin) < 4 or len(cleaned_pin) > 6:
+                st.error("Transaction PIN must be 4 to 6 numeric digits (e.g. 1234 or 123456).")
+                return
+
+            if cleaned_pin != cleaned_confirm:
+                st.error("New PIN and confirmation PIN do not match.")
+                return
+
+            try:
+                with st.spinner("Updating your transaction PIN..."):
+                    res = banking_client.set_transaction_pin(
+                        access_token=access_token,
+                        current_password=curr_pass,
+                        new_pin=cleaned_pin,
+                        confirm_pin=cleaned_confirm,
+                    )
+                    st.success("✅ " + res.get("message", "Transaction PIN updated successfully!"))
+            except BankingAPIError as be:
+                st.error(f"❌ Failed to update PIN: {be.message}")
+            except Exception as ex:
+                st.error(f"❌ An error occurred: {ex}")
+
+
 def render_direct_banking() -> None:
     """Main direct banking interface rendering Accounts, Beneficiaries, and History tabs."""
     token = get_access_token()
@@ -424,3 +493,6 @@ def render_direct_banking() -> None:
 
     with tab_hist:
         render_history_tab(banking_client, token)
+
+    st.markdown("---")
+    render_pin_management_section(banking_client, token)

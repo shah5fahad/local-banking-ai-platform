@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class UserResponse(BaseModel):
@@ -67,19 +67,70 @@ class ChangePasswordRequest(BaseModel):
     )
 
 
-class SetPinRequest(BaseModel):
-    """Request schema for setting or updating transaction PIN."""
+class ResetPinRequest(BaseModel):
+    """Request schema for resetting or setting transaction PIN with password verification."""
 
-    password: str
-    pin: str
+    current_password: str = Field(
+        ..., description="Current login password for verification"
+    )
+    new_pin: str = Field(
+        ..., description="New 4-6 digit numeric transaction PIN"
+    )
+    confirm_pin: Optional[str] = Field(
+        default=None, description="Confirmation of new PIN"
+    )
 
-    @field_validator("pin")
+    @property
+    def password(self) -> str:
+        return self.current_password
+
+    @property
+    def pin(self) -> str:
+        return self.new_pin
+
+    @model_validator(mode="before")
     @classmethod
-    def validate_pin(cls, v: str) -> str:
-        cleaned = v.strip()
+    def populate_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            # allow password as fallback for current_password
+            if "password" in data and "current_password" not in data:
+                data["current_password"] = data["password"]
+            # allow pin as fallback for new_pin
+            if "pin" in data and "new_pin" not in data:
+                data["new_pin"] = data["pin"]
+        return data
+
+    @field_validator("new_pin")
+    @classmethod
+    def validate_new_pin(cls, v: str) -> str:
+        cleaned = v.strip() if v else ""
         if not re.match(r"^\d{4,6}$", cleaned):
             raise ValueError("Transaction PIN must be 4 to 6 numeric digits")
         return cleaned
+
+    @model_validator(mode="after")
+    def validate_confirmation(self) -> ResetPinRequest:
+        if self.confirm_pin is not None:
+            cleaned_confirm = self.confirm_pin.strip() if self.confirm_pin else ""
+            if cleaned_confirm != self.new_pin:
+                raise ValueError("PIN confirmation does not match new PIN")
+        return self
+
+
+class SetPinRequest(ResetPinRequest):
+    """Request schema for setting or updating transaction PIN (alias/compatible with ResetPinRequest)."""
+
+    pass
+
+
+class ResetPinResponse(BaseModel):
+    """Response schema after successfully setting or regenerating transaction PIN."""
+
+    message: str = "Transaction PIN updated successfully"
+    transaction_pin_set: bool = True
+
+
+SetPinResponse = ResetPinResponse
 
 
 class UserSummaryResponse(BaseModel):

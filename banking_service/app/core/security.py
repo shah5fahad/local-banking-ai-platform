@@ -194,3 +194,12 @@ def mask_card_number(last4: str) -> str:
     clean_last4 = last4[-4:] if len(last4) >= 4 else last4.rjust(4, "X")
     return f"XXXX-XXXX-XXXX-{clean_last4}"
 
+
+def to_utc(dt: datetime | None) -> datetime | None:
+    """Ensure a datetime object is timezone-aware in UTC."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+

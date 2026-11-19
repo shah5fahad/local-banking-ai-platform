@@ -70,17 +70,24 @@ Legend: **D** = depends on, **AC** = acceptance criteria. Each task includes tes
 - [x] T7.3 Provision initial loan offers on signup: automatically create at least three loan offers (home loan, car loan, personal loan) with defined terms, conditions, and interest rates linked to the user account in the database upon registration. D: T2.10, T7.1. AC: newly registered user has at least 3 distinct loan offers accessible via loans API; tests verify offer generation.
 - [x] T7.4 Customer dashboard details display: update dashboard endpoint and frontend view to fetch and display bank account, card, and loan details to the user on their dashboard after logging in. D: T6.1, T6.6, T7.1, T7.2, T7.3. AC: authenticated user dashboard displays accounts, card details, and loan offers seamlessly post-login.
 
-## Phase 8: Testing and Hardening
-- [ ] T8.1 Unit/integration suites to coverage targets.
-- [ ] T8.2 Security suite (`testing.md` §2).
-- [ ] T8.3 AI eval datasets and runner.
-- [ ] T8.4 Performance/concurrency tests; fix hot spots.
-- [ ] T8.5 Error-handling and UX pass; log secret-leak audit.
+## Phase 8: Transaction PIN Management & Setup
+- [x] T8.1 Registration PIN Setup: enhance user registration schemas (`RegisterRequest` in `banking_service/app/schemas/auth.py`), `AuthService.register_user`, and endpoint (`banking_service/app/api/v1/auth.py`) to require users to provide a mandatory 4-6 digit numeric transaction PIN upon creation/registration; securely hash with Argon2 (`hash_pin`) and store in `transaction_pin_hash`. D: T2.2, T7.1. AC: user must configure transaction PIN directly during signup; input validation enforces 4-6 digits; unit and integration tests verify PIN persistence and rejection when omitted.
+- [x] T8.2 PIN Regeneration API with Password Verification: implement a dedicated PIN reset/regeneration endpoint `POST /api/v1/users/pin` in `banking_service/app/api/v1/users.py` allowing authenticated users to reset/regenerate their transaction PIN by verifying their account password; audit log event (`USER_PIN_UPDATE`). D: T2.3, T2.4. AC: authenticated user successfully updates transaction PIN after verifying password; rejects incorrect password, invalid PIN format, or mismatched confirmation; unit tests pass.
+- [x] T8.3 Frontend Registration Form PIN Option: update the registration form in `frontend/components/auth_forms.py` (`render_signup_form`) to provide transaction PIN input fields (4-6 digits with confirmation) and client-side format validation; update `BankingClient.register` to send PIN. D: T6.1, T8.1. AC: users can optionally specify their transaction PIN during account creation on the portal; validation displays clear guidance.
+- [x] T8.4 Frontend PIN Regeneration UI: add a secure PIN management component in the frontend (e.g. security settings dialog / card in Direct Banking or Sidebar) enabling users to regenerate their transaction PIN using their account password; update `BankingClient` with `set_transaction_pin` method. D: T6.1, T6.6, T8.2. AC: user can regenerate PIN from the frontend by providing current password and new PIN; shows success/error feedback.
+- [x] T8.5 End-to-End PIN Verification Tests: write comprehensive unit, integration, and UI client tests verifying PIN setup on registration, PIN regeneration with password verification, rejection on invalid password, and end-to-end authorization of sensitive operations (beneficiary creation, transfers) with the new PIN. D: T8.1, T8.2, T8.3, T8.4. AC: test suites in banking_service and frontend cover registration PIN setup and password-verified PIN regeneration with 100% pass rate.
 
-## Phase 9: Deployment and Documentation
-- [ ] T9.1 Production-like Compose profile (TLS reverse proxy, non-root containers, healthchecks).
-- [ ] T9.2 Final docs: API docs export, deployment guide, troubleshooting, PostgreSQL migration guide.
-- [ ] T9.3 Release checklist and CHANGELOG 0.1.0.
+## Phase 9: Testing and Hardening
+- [ ] T9.1 Unit/integration suites to coverage targets.
+- [ ] T9.2 Security suite (`testing.md` §2).
+- [ ] T9.3 AI eval datasets and runner.
+- [ ] T9.4 Performance/concurrency tests; fix hot spots.
+- [ ] T9.5 Error-handling and UX pass; log secret-leak audit.
+
+## Phase 10: Deployment and Documentation
+- [ ] T10.1 Production-like Compose profile (TLS reverse proxy, non-root containers, healthchecks).
+- [ ] T10.2 Final docs: API docs export, deployment guide, troubleshooting, PostgreSQL migration guide.
+- [ ] T10.3 Release checklist and CHANGELOG 0.1.0.
 
 ## Suggested order for incremental delivery
-Foundation → Auth → Accounts/Beneficiaries → Transfers → (parallel) Loans/Cards and AI infra → Agents → HITL → Frontend → Banking System Improvements → Hardening.
+Foundation → Auth → Accounts/Beneficiaries → Transfers → (parallel) Loans/Cards and AI infra → Agents → HITL → Frontend → Banking System Improvements → PIN Management → Hardening → Deployment.

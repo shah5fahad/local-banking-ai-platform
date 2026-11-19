@@ -45,6 +45,7 @@ def test_end_to_end_signup_auto_creates_verified_bank_account(client: TestClient
         "phone": "+919811122233",
         "full_name": "Priya Sharma",
         "password": "SecurePassword2024!",
+        "pin": "1234",
     }
     reg_res = client.post("/api/v1/auth/register", json=payload)
     assert reg_res.status_code == 201
@@ -120,12 +121,14 @@ def test_multiple_signups_create_distinct_accounts(client: TestClient) -> None:
         "phone": "+919811100001",
         "full_name": "User One",
         "password": "Password123!@",
+        "pin": "1234",
     }
     user2 = {
         "email": "user2@example.com",
         "phone": "+919811100002",
         "full_name": "User Two",
         "password": "Password123!@",
+        "pin": "5678",
     }
 
     r1 = client.post("/api/v1/auth/register", json=user1)
@@ -157,6 +160,7 @@ def test_end_to_end_signup_auto_creates_active_card(client: TestClient) -> None:
         "phone": "+919811199887",
         "full_name": "Cardholder User",
         "password": "SecurePassword2024!",
+        "pin": "1234",
     }
     reg_res = client.post("/api/v1/auth/register", json=payload)
     assert reg_res.status_code == 201
@@ -217,6 +221,7 @@ def test_end_to_end_signup_auto_creates_three_loan_offers(client: TestClient) ->
         "phone": "+919811199333",
         "full_name": "Loan Applicant User",
         "password": "SecurePassword2024!",
+        "pin": "1234",
     }
     reg_res = client.post("/api/v1/auth/register", json=payload)
     assert reg_res.status_code == 201
@@ -265,3 +270,129 @@ def test_end_to_end_signup_auto_creates_three_loan_offers(client: TestClient) ->
     single = single_res.json()
     assert single["id"] == first_offer["id"]
     assert single["loan_type"] == first_offer["loan_type"]
+
+
+def test_signup_with_pin_persists_and_verifies_approval_challenge(client: TestClient) -> None:
+    """T8.1: Test that signing up with a transaction PIN persists it and enables immediate challenge verification."""
+    payload = {
+        "email": "pintest@example.com",
+        "phone": "+919876549999",
+        "full_name": "PIN Test User",
+        "password": "StrongPassword123!",
+        "pin": "5678",
+    }
+    reg_res = client.post("/api/v1/auth/register", json=payload)
+    assert reg_res.status_code == 201
+    reg_data = reg_res.json()
+    assert reg_data["transaction_pin_set"] is True
+
+    # Login
+    login_res = client.post(
+        "/api/v1/auth/login",
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+    assert login_res.status_code == 200
+    token = login_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Create approval challenge
+    ch_res = client.post(
+        "/api/v1/approvals/challenges",
+        headers=headers,
+        json={
+            "action": "BENEFICIARY_CREATE",
+            "payload_hash": "b" * 64,
+        },
+    )
+    assert ch_res.status_code == 201
+    ch_data = ch_res.json()
+    challenge_id = ch_data["challenge_id"]
+
+    # Verify challenge with the PIN configured during signup
+    verify_res = client.post(
+        f"/api/v1/approvals/challenges/{challenge_id}/verify",
+        headers=headers,
+        json={"pin": "5678"},
+    )
+    assert verify_res.status_code == 200
+    assert "approval_token" in verify_res.json()
+
+
+def test_signup_pin_regeneration_and_approval_flow_e2e(client: TestClient) -> None:
+    """T8.5: End-to-end integration test verifying signup with PIN, password-verified PIN regeneration,
+    and subsequent authorization of sensitive operations using the updated PIN."""
+    payload = {
+        "email": "pinflow@example.com",
+        "phone": "+919876540001",
+        "full_name": "PIN Flow User",
+        "password": "StrongPassword123!",
+        "pin": "1234",
+    }
+    reg_res = client.post("/api/v1/auth/register", json=payload)
+    assert reg_res.status_code == 201
+    assert reg_res.json()["transaction_pin_set"] is True
+
+    # 1. Login
+    login_res = client.post(
+        "/api/v1/auth/login",
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+    assert login_res.status_code == 200
+    token = login_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 2. Attempt PIN regeneration with wrong password -> rejected 401
+    fail_reset = client.post(
+        "/api/v1/users/pin",
+        headers=headers,
+        json={
+            "current_password": "WrongPassword999!",
+            "new_pin": "9876",
+            "confirm_pin": "9876",
+        },
+    )
+    assert fail_reset.status_code == 401
+
+    # 3. Regenerate PIN with correct password -> success 200
+    succ_reset = client.post(
+        "/api/v1/users/pin",
+        headers=headers,
+        json={
+            "current_password": "StrongPassword123!",
+            "new_pin": "987654",
+            "confirm_pin": "987654",
+        },
+    )
+    assert succ_reset.status_code == 200
+    assert succ_reset.json()["transaction_pin_set"] is True
+
+    # 4. Request challenge for beneficiary creation
+    ch_res = client.post(
+        "/api/v1/approvals/challenges",
+        headers=headers,
+        json={
+            "action": "BENEFICIARY_CREATE",
+            "payload_hash": "c" * 64,
+        },
+    )
+    assert ch_res.status_code == 201
+    ch_id = ch_res.json()["challenge_id"]
+
+    # 5. Old PIN 1234 fails
+    old_pin_res = client.post(
+        f"/api/v1/approvals/challenges/{ch_id}/verify",
+        headers=headers,
+        json={"pin": "1234"},
+    )
+    assert old_pin_res.status_code == 401
+
+    # 6. New PIN 987654 succeeds and returns single-use approval token
+    new_pin_res = client.post(
+        f"/api/v1/approvals/challenges/{ch_id}/verify",
+        headers=headers,
+        json={"pin": "987654"},
+    )
+    assert new_pin_res.status_code == 200
+    approval_token = new_pin_res.json()["approval_token"]
+    assert len(approval_token) > 10
+

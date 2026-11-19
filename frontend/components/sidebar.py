@@ -6,9 +6,12 @@ import time
 
 import streamlit as st
 
+from clients.banking_client import BankingAPIError
 from state.session import (
     DEFAULT_TIMEOUT_MINUTES,
     check_idle_timeout,
+    get_access_token,
+    get_banking_client,
     get_current_roles,
     get_current_user,
     is_authenticated,
@@ -55,7 +58,40 @@ def render_sidebar_auth() -> None:
                 if st.button("🚪 Logout", key="sidebar_logout_btn", use_container_width=True):
                     logout_user(notify_backend=True)
                     st.success("Logged out.")
+                    time.sleep(0.3)
                     st.rerun()
+
+            # PIN management in sidebar
+            with st.expander("🔐 Change Transaction PIN", expanded=False):
+                with st.form("sidebar_pin_reset_form", clear_on_submit=True):
+                    sb_pwd = st.text_input("Account Password", type="password", key="sb_pin_pwd")
+                    sb_new_pin = st.text_input("New PIN (4-6 digits)", type="password", max_chars=6, key="sb_pin_new")
+                    sb_conf_pin = st.text_input("Confirm New PIN", type="password", max_chars=6, key="sb_pin_conf")
+                    sb_submit = st.form_submit_button("Update PIN", use_container_width=True)
+
+                if sb_submit:
+                    if not sb_pwd or not sb_new_pin or not sb_conf_pin:
+                        st.error("Please fill in all fields.")
+                    elif not sb_new_pin.strip().isdigit() or len(sb_new_pin.strip()) < 4 or len(sb_new_pin.strip()) > 6:
+                        st.error("PIN must be 4 to 6 numeric digits.")
+                    elif sb_new_pin.strip() != sb_conf_pin.strip():
+                        st.error("PINs do not match.")
+                    else:
+                        try:
+                            token = get_access_token()
+                            if token:
+                                b_client = get_banking_client()
+                                res = b_client.set_transaction_pin(
+                                    access_token=token,
+                                    current_password=sb_pwd,
+                                    new_pin=sb_new_pin.strip(),
+                                    confirm_pin=sb_conf_pin.strip(),
+                                )
+                                st.success("Transaction PIN updated successfully!")
+                        except BankingAPIError as be:
+                            st.error(be.message)
+                        except Exception as e:
+                            st.error(str(e))
 
             st.markdown("---")
         else:

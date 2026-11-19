@@ -47,6 +47,7 @@ def register(
         password=req.password,
         db=db,
         settings=settings,
+        pin=req.pin,
     )
     db.commit()
     db.refresh(user)
@@ -65,6 +66,7 @@ def register(
         id=user.id,
         email=user.email,
         full_name=user.full_name,
+        transaction_pin_set=bool(user.transaction_pin_hash),
         account_id=primary_acc.id if primary_acc else None,
         account_number_masked=primary_acc.account_number_masked if primary_acc else None,
         account=account_resp,

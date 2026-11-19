@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import BankingSettings
 from app.core.errors import BankingError, ConflictError
-from app.core.security import hash_password, verify_password
+from app.core.security import hash_password, hash_pin, verify_password
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.services.token_service import TokenService
@@ -54,6 +54,19 @@ def validate_password_strength(password: str) -> None:
         )
 
 
+_PIN_RE = re.compile(r"^\d{4,6}$")
+
+
+def validate_pin_format(pin: str) -> None:
+    """Ensure transaction PIN is 4 to 6 numeric digits."""
+    if not pin or not _PIN_RE.match(str(pin).strip()):
+        raise BankingError(
+            "INVALID_PIN_FORMAT",
+            "Transaction PIN is required and must be 4 to 6 numeric digits",
+            http_status=422,
+        )
+
+
 class AuthService:
     """Service handling user registration, authentication, and account security."""
 
@@ -71,9 +84,19 @@ class AuthService:
         auto_create_account: bool = True,
         auto_create_card: bool = True,
         auto_create_loans: bool = True,
+        pin: str | None = None,
     ) -> User:
         """Register a new user with CUSTOMER role and auto-create primary bank account, card, and loan offers."""
         validate_password_strength(password)
+
+        if pin is None or not str(pin).strip():
+            raise BankingError(
+                "INVALID_PIN_FORMAT",
+                "Transaction PIN is required for registration",
+                http_status=422,
+            )
+        validate_pin_format(pin)
+        pin_hash = hash_pin(str(pin).strip())
 
         norm_email = email.strip().lower()
         norm_phone = phone.strip()
@@ -91,6 +114,7 @@ class AuthService:
             phone=norm_phone,
             full_name=full_name.strip(),
             password_hash=pwd_hash,
+            transaction_pin_hash=pin_hash,
         )
         user = user_repo.create(new_user)
 

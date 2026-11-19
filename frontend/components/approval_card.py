@@ -42,6 +42,8 @@ def render_approval_card(approval_data: dict[str, Any]) -> None:
         if expires_at_str:
             try:
                 exp_dt = datetime.datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
+                if exp_dt.tzinfo is None:
+                    exp_dt = exp_dt.replace(tzinfo=datetime.timezone.utc)
                 now_dt = datetime.datetime.now(datetime.timezone.utc)
                 remaining_sec = int((exp_dt - now_dt).total_seconds())
                 if remaining_sec > 0:

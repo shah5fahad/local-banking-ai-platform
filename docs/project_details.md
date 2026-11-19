@@ -807,7 +807,14 @@ Divide implementation into phases.
 - Provision loan offers (home, car, personal loan) on signup.
 - User dashboard displaying bank, card, and loan details post-login.
 
-### Phase 8: Testing and Hardening
+### Phase 8: Transaction PIN Management & Setup
+- Option to provide transaction PIN during user creation/registration.
+- Option to regenerate/reset transaction PIN using password verification.
+- Backend PIN schemas, auth/user endpoints, and security auditing.
+- Frontend registration form PIN fields and PIN regeneration settings view.
+- Comprehensive unit and integration test coverage.
+
+### Phase 9: Testing and Hardening
 - Unit tests.
 - Integration tests.
 - Security tests.
@@ -815,7 +822,7 @@ Divide implementation into phases.
 - Performance testing.
 - Error handling.
 
-### Phase 9: Deployment and Documentation
+### Phase 10: Deployment and Documentation
 - Docker Compose.
 - Environment setup.
 - API documentation.

@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import BankingSettings
 from app.core.errors import BankingError, ConflictError
+from app.core.security import verify_pin
 from app.db.base import Base
 import app.models  # noqa: F401
 from app.services.auth_service import AuthService
@@ -35,6 +36,7 @@ def test_register_success(db_session) -> None:
         password="ValidPassword123!",
         db=db_session,
         settings=settings,
+        pin="1234",
     )
     db_session.commit()
 
@@ -98,6 +100,7 @@ def test_register_without_auto_create_loans(db_session) -> None:
         db=db_session,
         settings=settings,
         auto_create_loans=False,
+        pin="1234",
     )
     db_session.commit()
 
@@ -117,6 +120,7 @@ def test_register_without_auto_create_card(db_session) -> None:
         db=db_session,
         settings=settings,
         auto_create_card=False,
+        pin="1234",
     )
     db_session.commit()
 
@@ -136,6 +140,7 @@ def test_register_without_auto_create_account(db_session) -> None:
         db=db_session,
         settings=settings,
         auto_create_account=False,
+        pin="1234",
     )
     db_session.commit()
 
@@ -155,6 +160,7 @@ def test_register_weak_password_fails(db_session) -> None:
             password="weak",
             db=db_session,
             settings=settings,
+            pin="1234",
         )
     assert exc.value.http_status == 422
 
@@ -170,6 +176,7 @@ def test_register_duplicate_email_conflict(db_session) -> None:
         password="ValidPassword123!",
         db=db_session,
         settings=settings,
+        pin="1234",
     )
     db_session.commit()
 
@@ -181,6 +188,7 @@ def test_register_duplicate_email_conflict(db_session) -> None:
             password="ValidPassword123!",
             db=db_session,
             settings=settings,
+            pin="1234",
         )
 
 
@@ -197,6 +205,7 @@ def test_login_success_and_failed_lockout(db_session) -> None:
         password="ValidPassword123!",
         db=db_session,
         settings=settings,
+        pin="1234",
     )
     db_session.commit()
 
@@ -225,3 +234,80 @@ def test_login_success_and_failed_lockout(db_session) -> None:
         )
     assert exc.value.http_status == 423
     assert exc.value.error_code == "ACCOUNT_LOCKED"
+
+
+def test_register_with_valid_4digit_pin(db_session) -> None:
+    settings = BankingSettings()
+    auth_service = AuthService()
+
+    user = auth_service.register(
+        email="pin4@example.com",
+        phone="+919876543201",
+        full_name="Pin User 4",
+        password="ValidPassword123!",
+        db=db_session,
+        settings=settings,
+        pin="4321",
+    )
+    db_session.commit()
+
+    assert user.transaction_pin_hash is not None
+    assert verify_pin("4321", user.transaction_pin_hash) is True
+    assert verify_pin("0000", user.transaction_pin_hash) is False
+
+
+def test_register_with_valid_6digit_pin(db_session) -> None:
+    settings = BankingSettings()
+    auth_service = AuthService()
+
+    user = auth_service.register(
+        email="pin6@example.com",
+        phone="+919876543202",
+        full_name="Pin User 6",
+        password="ValidPassword123!",
+        db=db_session,
+        settings=settings,
+        pin="654321",
+    )
+    db_session.commit()
+
+    assert user.transaction_pin_hash is not None
+    assert verify_pin("654321", user.transaction_pin_hash) is True
+
+
+def test_register_without_pin_raises_error(db_session) -> None:
+    settings = BankingSettings()
+    auth_service = AuthService()
+
+    with pytest.raises(BankingError) as exc:
+        auth_service.register(
+            email="nopin@example.com",
+            phone="+919876543203",
+            full_name="No Pin User",
+            password="ValidPassword123!",
+            db=db_session,
+            settings=settings,
+            pin=None,
+        )
+    assert exc.value.http_status == 422
+    assert exc.value.error_code == "INVALID_PIN_FORMAT"
+
+
+def test_register_with_invalid_pin_format_raises(db_session) -> None:
+    settings = BankingSettings()
+    auth_service = AuthService()
+
+    for invalid_pin in ["123", "1234567", "abcd", "12a4", "  "]:
+        with pytest.raises(BankingError) as exc:
+            auth_service.register(
+                email=f"badpin_{invalid_pin.strip()}@example.com",
+                phone="+919876543204",
+                full_name="Bad Pin User",
+                password="ValidPassword123!",
+                db=db_session,
+                settings=settings,
+                pin=invalid_pin,
+            )
+        assert exc.value.http_status == 422
+        assert exc.value.error_code == "INVALID_PIN_FORMAT"
+

@@ -30,6 +30,10 @@ class RegisterRequest(BaseModel):
     )
     full_name: str = Field(..., min_length=1, max_length=255)
     password: str = Field(..., min_length=12)
+    pin: str = Field(
+        ...,
+        description="Required 4-6 digit numeric transaction PIN",
+    )
 
     @field_validator("email")
     @classmethod
@@ -54,6 +58,13 @@ class RegisterRequest(BaseModel):
             raise ValueError("Password must contain at least one special character")
         return v
 
+    @field_validator("pin")
+    @classmethod
+    def validate_pin_format(cls, v: str) -> str:
+        if not v or not re.match(r"^\d{4,6}$", v.strip()):
+            raise ValueError("Transaction PIN is required and must be 4 to 6 numeric digits")
+        return v.strip()
+
 
 class RegisterResponse(BaseModel):
     """Response returned upon successful registration."""
@@ -61,6 +72,7 @@ class RegisterResponse(BaseModel):
     id: str
     email: str
     full_name: str
+    transaction_pin_set: bool = True
     account_id: Optional[str] = None
     account_number_masked: Optional[str] = None
     account: Optional[AccountResponse] = None
